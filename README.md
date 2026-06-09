@@ -51,6 +51,20 @@ All Level-2 parameters default to zero (no effect), so the model degrades exactl
 - Small-signal parameters at each point: `gm`, `ro`, `|Av| = gm·(ro‖RD)`
 - Level-1 vs Level-2 comparison: effect of each physical enhancement on VOUT and ID
 
+### Level-3 Model — AC Small-Signal Frequency Sweep
+
+Extends MNA to the complex frequency domain:
+
+| Feature | Details |
+|---------|---------|
+| **Gate capacitance model** (Ch. 4) | Cgs/Cgd/Cgb computed from charge-based partition with smooth sigmoid region transitions |
+| **Region-dependent partition** | Cutoff: Cgb=Cgg; Linear: Cgs=Cgd=Cgg/2; Saturation: Cgs=2/3·Cgg, Cgd≈0 |
+| **Overlap capacitances** | Cgso, Cgdo added to intrinsic caps (technology parameters) |
+| **Complex MNA** | Y(jω) = G + jω·C, solved at each frequency point |
+| **Transfer function** | H(jω) = VOUT/VIN computed from unit AC excitation |
+| **−3 dB bandwidth** | Interpolated from |H(jω)| roll-off |
+| **fT** | Unity current-gain frequency = gm / (2π·(Cgs+Cgd)) |
+
 ---
 
 ## Project Structure
@@ -60,14 +74,15 @@ nano-spice/
 ├── simulate.py                  # Main script — run this
 ├── spice_sim/
 │   ├── models/
-│   │   ├── nmos.py              # NMOS Level-1/2 model + analytic derivatives
+│   │   ├── nmos.py              # NMOS Level-1/2/3 model + caps + derivatives
 │   │   └── resistor.py          # Linear resistor + MNA stamp
 │   ├── core/
 │   │   ├── mna.py               # MNA matrix builder (7-variable, Rs/Rd support)
 │   │   └── newton.py            # Newton-Raphson solver with damping
 │   └── analysis/
 │       ├── dc_op.py             # Single-point DC operating point
-│       └── dc_sweep.py          # DC parameter sweep
+│       ├── dc_sweep.py          # DC parameter sweep
+│       └── ac_sweep.py          # AC small-signal frequency sweep (Level-3)
 └── results/                     # Generated figures (git-ignored)
 ```
 
@@ -93,7 +108,9 @@ Output figures are saved to `results/`:
 | `newton_iters.png` | Newton-Raphson iteration count per point |
 | `level2_comparison.png` | Level-1 vs each Level-2 effect on VOUT |
 | `level2_gm_id.png` | Level-1 vs Level-2 on gm and ID |
-| `overview.png` | All plots in one image (4×3 grid) |
+| `ac_bode.png` | AC Bode plot: magnitude + phase, with −3dB and fT markers |
+| `ac_caps_vs_vin.png` | Cgs/Cgd/Cgb vs VIN (Ch. 4 charge-based model) |
+| `overview.png` | All plots in one image (5×3 grid, including AC row) |
 
 ---
 
@@ -170,4 +187,5 @@ Key references from course lectures:
 - Ch. 10: LU decomposition for linear systems
 - Ch. 11: Newton-Raphson for nonlinear DC analysis
 - Ch. 2–3: BSIM MOSFET models (Vgsteff, Abul, mobility)
+- Ch. 4: Charge and capacitance model — Cgs/Cgd/Cgb partitioning
 - Ch. 5: Parasitic gate/source/drain resistances

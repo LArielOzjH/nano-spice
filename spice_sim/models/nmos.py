@@ -41,7 +41,8 @@ class NMOSModel:
     """
 
     def __init__(self, vth=0.8, kp=100e-6, lam=0.02, wl=10.0, delta=0.02,
-                 theta=0.0, eta=0.0, gamma=0.0, phi_f=0.7, n_sub=None):
+                 theta=0.0, eta=0.0, gamma=0.0, phi_f=0.7, n_sub=None,
+                 cgg=None, cgso=0.0, cgdo=0.0):
         self.vth   = vth
         self.kp    = kp
         self.lam   = lam
@@ -52,6 +53,13 @@ class NMOSModel:
         self.gamma = gamma
         self.phi_f = phi_f
         self.n_sub = n_sub
+        # Capacitance model (Chapter 4)
+        # cgg  : total intrinsic gate cap Cox·W·L (F); None disables cap model
+        # cgso : gate-source overlap cap (F)
+        # cgdo : gate-drain overlap cap (F)
+        self.cgg  = cgg
+        self.cgso = float(cgso)
+        self.cgdo = float(cgdo)
 
     # ── 内部：softmin 及其偏导 ────────────────────────────────────────────────
 
@@ -196,3 +204,41 @@ class NMOSModel:
         if vds > vov + self.delta:
             return "Saturation"
         return "Transition"
+
+    def capacitances(self, vgs, vds, vsb=0.0):
+        """
+        Compute small-signal NMOS gate capacitances (F) at operating point.
+
+        Simplified charge-based partition (Meyer-like, smooth transitions):
+          Cutoff    : Cgs = Cgso,          Cgd = Cgdo,          Cgb = Cgg
+          Linear    : Cgs = Cgg/2 + Cgso,  Cgd = Cgg/2 + Cgdo,  Cgb = 0
+          Saturation: Cgs = 2/3*Cgg + Cgso, Cgd = Cgdo,          Cgb = 0
+
+        Smooth sigmoid blending avoids discontinuities between regions.
+
+        Returns (Cgs, Cgd, Cgb) in Farads.
+        Returns (0, 0, 0) if cgg is None (capacitance model disabled).
+        """
+        if self.cgg is None:
+            return 0.0, 0.0, 0.0
+
+        # Simplified Vov using Level-1 Vth (adequate for cap partition)
+        vov = vgs - self.vth
+
+        # Smooth step width (V) — a few kT/q so the transition is physically smooth
+        w = 0.05
+
+        # sig_on: 0 in cutoff, 1 in strong inversion
+        sig_on = 1.0 / (1.0 + np.exp(-vov / w))
+
+        # sig_sat: 0 in linear, 1 in saturation  (Vds crosses Vov)
+        # Use max(vov,0) so sig_sat is well-defined for Vov<0 (sig_on~0 anyway)
+        vdsat = max(float(vov), 1e-6)
+        sig_sat = 1.0 / (1.0 + np.exp(-(vds - vdsat) / w))
+
+        # Intrinsic channel cap partition
+        cgs_int = self.cgg * sig_on * (0.5 + (2.0 / 3.0 - 0.5) * sig_sat)
+        cgd_int = self.cgg * sig_on * 0.5 * (1.0 - sig_sat)
+        cgb     = self.cgg * (1.0 - sig_on)
+
+        return cgs_int + self.cgso, cgd_int + self.cgdo, cgb
