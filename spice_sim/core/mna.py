@@ -64,6 +64,19 @@ class MNABuilder:
         I_eq = ID_k - gm_k * vgs_int - gds_k * vds_int - gmb_k * vsb
         return ID_k, gm_k, gds_k, gmb_k, I_eq
 
+    def _diode_stamp(self, x):
+        """计算当前工作点的 BD/BS 二极管伴随模型参数。"""
+        V2 = x[self.IDX_V2]
+        V4 = x[self.IDX_V4]
+        V5 = x[self.IDX_V5]
+        # 本征漏极电压：Rd>0 时为 V5，Rd=0 时 V5=V2
+        v_d_int = V5 if self.G_rd > 0.0 else V2
+        # 本征源极电压：Rs>0 时为 V4，Rs=0 时 V4=0（衬底电压相同，IBS≡0）
+        v_s_int = V4 if self.G_rs > 0.0 else 0.0
+        vbd = -v_d_int   # V_B - V_D' (B=GND)
+        vbs = -v_s_int   # V_B - V_S'
+        return self.mos._eval_diodes(vbd, vbs)
+
     def build(self, x, vin, vdd):
         """
         在工作点 x 处构建线性化 MNA 方程组 A·x_new = b。
@@ -79,6 +92,7 @@ class MNABuilder:
         A (7×7), b (7,)
         """
         _, gm_k, gds_k, gmb_k, I_eq = self._mos_stamp(x)
+        IBD, GBD, IBD0, IBS, GBS, IBS0 = self._diode_stamp(x)
 
         A = np.zeros((self.N, self.N))
         b = np.zeros(self.N)
@@ -97,12 +111,11 @@ class MNABuilder:
             A[1, self.IDX_V5] += self.G_rd
         else:
             # Rd=0 → V5=V2，NMOS 漏极直接连节点2，ID 在本行 stamp
-            # (V3-V2)*G_load - ID = 0
-            # ID ≈ I_eq + gm*V1 + (-gm-gds+gmb)*V4 + gds*V2
+            # (V3-V2)*G_load - ID + I_BD = 0  （I_BD 从 B 流入 D'=V2）
             A[1, self.IDX_V1] -= gm_k
             A[1, self.IDX_V4] += gm_k + gds_k - gmb_k
-            A[1, self.IDX_V2] -= gds_k
-            b[1]               = I_eq
+            A[1, self.IDX_V2] -= gds_k + GBD    # GBD：BD 结在节点2的增量电导
+            b[1]               = I_eq - IBD0     # 伴随电流源 IBD0 移至 RHS
 
         # ── 行2：节点3 KCL（VDD） ─────────────────────────────────────────────
         A[2, self.IDX_V2]   += self.G_load
@@ -111,26 +124,24 @@ class MNABuilder:
 
         # ── 行3：节点4（本征 Source S'）或约束 V4=0 ──────────────────────────
         if self.G_rs > 0.0:
-            # KCL: ID - V4·G_rs = 0
-            # gm·V1 + (-gm-gds+gmb-G_rs)·V4 + gds·V5 = -I_eq
+            # KCL: ID + I_BS - V4·G_rs = 0  （I_BS 从 B 流入 S'=V4）
             A[3, self.IDX_V1] += gm_k
-            A[3, self.IDX_V4] += -gm_k - gds_k + gmb_k - self.G_rs
+            A[3, self.IDX_V4] += -gm_k - gds_k + gmb_k - self.G_rs - GBS
             A[3, self.IDX_V5] += gds_k
-            b[3]               = -I_eq
+            b[3]               = -(I_eq + IBS0)
         else:
-            # Rs=0 → 约束 V4 = 0
+            # Rs=0 → 约束 V4 = 0（S'=GND=B，I_BS≡0，无需 stamp）
             A[3, self.IDX_V4] = 1.0
             b[3]               = 0.0
 
         # ── 行4：节点5（本征 Drain D'）或约束 V5=V2 ──────────────────────────
         if self.G_rd > 0.0:
-            # KCL: (V2-V5)·G_rd - ID = 0
-            # -gm·V1 + (gm+gds-gmb)·V4 + G_rd·V2 - (G_rd+gds)·V5 = I_eq
+            # KCL: (V2-V5)·G_rd - ID + I_BD = 0  （I_BD 从 B 流入 D'=V5）
             A[4, self.IDX_V1] -= gm_k
             A[4, self.IDX_V4] += gm_k + gds_k - gmb_k
             A[4, self.IDX_V2] += self.G_rd
-            A[4, self.IDX_V5] -= self.G_rd + gds_k
-            b[4]               = I_eq
+            A[4, self.IDX_V5] -= self.G_rd + gds_k + GBD
+            b[4]               = I_eq - IBD0
         else:
             # Rd=0 → 约束 V5 = V2
             A[4, self.IDX_V5] =  1.0
@@ -158,22 +169,27 @@ class MNABuilder:
         vsb     = V4
         ID = self.mos.ids(vgs_int, vds_int, vsb)
 
+        # 二极管实际电流（非线性，无伴随近似）
+        v_d_int = V5 if self.G_rd > 0.0 else V2
+        v_s_int = V4 if self.G_rs > 0.0 else 0.0
+        IBD, _, _, IBS, _, _ = self.mos._eval_diodes(-v_d_int, -v_s_int)
+
         F = np.zeros(self.N)
-        F[0] = I_VIN                                        # 节点1 KCL
-        F[1] = (V3 - V2) * self.G_load - (V2 - V5) * self.G_rd  # 节点2 KCL
-        if self.G_rd == 0.0:
-            # Rd=0 时节点2直接连 NMOS 漏极
-            F[1] = (V3 - V2) * self.G_load - ID
-        F[2] = -(V3 - V2) * self.G_load + I_VDD            # 节点3 KCL
-        if self.G_rs > 0.0:
-            F[3] = ID - V4 * self.G_rs                     # 节点4 KCL
-        else:
-            F[3] = V4                                       # 约束 V4=0
+        F[0] = I_VIN                                             # 节点1 KCL
         if self.G_rd > 0.0:
-            F[4] = (V2 - V5) * self.G_rd - ID              # 节点5 KCL
+            F[1] = (V3 - V2) * self.G_load - (V2 - V5) * self.G_rd  # 节点2 KCL
         else:
-            F[4] = V5 - V2                                  # 约束 V5=V2
-        F[5] = V1 - vin                                     # KVL VIN
-        F[6] = V3 - vdd                                     # KVL VDD
+            F[1] = (V3 - V2) * self.G_load - ID + IBD           # Rd=0，D'=V2
+        F[2] = -(V3 - V2) * self.G_load + I_VDD                 # 节点3 KCL
+        if self.G_rs > 0.0:
+            F[3] = ID + IBS - V4 * self.G_rs                    # 节点4 KCL
+        else:
+            F[3] = V4                                            # 约束 V4=0
+        if self.G_rd > 0.0:
+            F[4] = (V2 - V5) * self.G_rd - ID + IBD             # 节点5 KCL
+        else:
+            F[4] = V5 - V2                                       # 约束 V5=V2
+        F[5] = V1 - vin                                          # KVL VIN
+        F[6] = V3 - vdd                                          # KVL VDD
 
         return F

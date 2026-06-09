@@ -42,7 +42,8 @@ class NMOSModel:
 
     def __init__(self, vth=0.8, kp=100e-6, lam=0.02, wl=10.0, delta=0.02,
                  theta=0.0, eta=0.0, gamma=0.0, phi_f=0.7, n_sub=None,
-                 cgg=None, cgso=0.0, cgdo=0.0):
+                 cgg=None, cgso=0.0, cgdo=0.0,
+                 IS=0.0):
         self.vth   = vth
         self.kp    = kp
         self.lam   = lam
@@ -60,6 +61,9 @@ class NMOSModel:
         self.cgg  = cgg
         self.cgso = float(cgso)
         self.cgdo = float(cgdo)
+        # BD/BS junction diode saturation current (A)
+        # IS=0 disables diodes (default, backward-compatible)
+        self.IS = float(IS)
 
     # ── 内部：softmin 及其偏导 ────────────────────────────────────────────────
 
@@ -171,6 +175,50 @@ class NMOSModel:
                      + kp_eff * self.wl * df_dvsb) * clm
 
         return ID, gm_val, gds_val, gmb_val
+
+    # ── BD/BS 结二极管 ────────────────────────────────────────────────────────
+
+    def _eval_diodes(self, vbd, vbs):
+        """
+        BD 和 BS 结二极管的伴随模型参数（Newton-Raphson 线性化用）。
+
+        参数
+        ----
+        vbd : V_B - V_D'  (衬底相对本征漏极电压，正偏时 >0)
+        vbs : V_B - V_S'  (衬底相对本征源极电压，正偏时 >0)
+
+        返回
+        ----
+        (IBD, GBD, IBD0, IBS, GBS, IBS0)
+
+        IBD  : 二极管电流 IS·(exp(vbd/VT)-1)，方向 B→D'（正值流入 D'）
+        GBD  : 增量电导 IS/VT·exp(vbd/VT)（恒正）
+        IBD0 : 伴随电流源 = IBD - GBD·vbd
+               （MNA 送值：A[D',D'] -= GBD；b[D'] -= IBD0）
+        IBS, GBS, IBS0 : BS 结同理
+
+        当 IS=0 时全部返回 0.0，不影响性能。
+        """
+        if self.IS == 0.0:
+            return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
+        VT = _VT_ROOM
+        # 指数限幅：防止正偏时溢出（反偏时 vbd<0 不需要担心）
+        vbd_c = min(float(vbd), 40.0 * VT)
+        vbs_c = min(float(vbs), 40.0 * VT)
+
+        exp_bd = np.exp(vbd_c / VT)
+        exp_bs = np.exp(vbs_c / VT)
+
+        IBD  = self.IS * (exp_bd - 1.0)
+        GBD  = self.IS / VT * exp_bd
+        IBD0 = IBD - GBD * vbd_c        # 伴随电流源
+
+        IBS  = self.IS * (exp_bs - 1.0)
+        GBS  = self.IS / VT * exp_bs
+        IBS0 = IBS - GBS * vbs_c
+
+        return IBD, GBD, IBD0, IBS, GBS, IBS0
 
     # ── 公开接口 ──────────────────────────────────────────────────────────────
 
