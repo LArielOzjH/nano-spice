@@ -1,14 +1,17 @@
 """
-NMOS 器件模型（Level-2，含高阶效应）
+NMOS 器件模型（Shichman-Hodges 基础 + 二阶物理效应 + 结二极管）
 
-在 Level-1 Shichman-Hodges 模型基础上增加：
-  2A. 亚阈值导通  — 通过统一有效栅压 Vgsteff 连续覆盖截止/弱反型/强反型
-  2B. 迁移率衰减  — 横向强电场下载流子散射增强，μeff = μ0/(1+θ·Vov)
-  2C. DIBL 效应   — 高漏压降低阈值电压，Vth_eff = Vth0 - η·VDS
-  2D. 体效应      — 源-衬底偏压升高阈值，Vth_eff += γ(√(VSB+2φF) - √(2φF))
+基础模型（Shichman-Hodges + CLM）：
+  截止区 / 线性区 / 饱和区，含沟道长度调制（λ），softmin 平滑 Lin/Sat 边界
 
-所有效应参数均有"关闭默认值"，令 theta=eta=gamma=0，n_sub=None 时
-模型退化为与原 Level-1 行为完全一致的结果。
+可选二阶效应（每项均可独立关闭，默认全部关闭）：
+  亚阈值导通  — 统一有效栅压 Vgsteff，连续覆盖弱/强反型
+  迁移率衰减  — μeff = μ0/(1+θ·Vov)
+  DIBL        — Vth_eff = Vth0 − η·VDS
+  体效应      — Vth_eff += γ(√(|VSB|+2φF) − √(2φF))
+
+BD/BS 结二极管（IS=0 时关闭）：
+  IBD = IS·(exp(VBD/VT)−1)，IBS = IS·(exp(VBS/VT)−1)
 
 所有导数（gm, gds, gmb）均为解析推导，确保 Newton-Raphson 二次收敛。
 """
@@ -20,9 +23,9 @@ _VT_ROOM = 0.025852  # kT/q at 300 K (V)
 
 class NMOSModel:
     """
-    NMOS Level-2 器件模型。
+    NMOS 器件模型（Shichman-Hodges + 二阶效应 + 结二极管）。
 
-    基础参数 (Level-1)
+    基础参数
     --------
     vth   : 零偏阈值电压 Vth0 (V)
     kp    : 工艺跨导 μ0·Cox (A/V²)
@@ -30,14 +33,14 @@ class NMOSModel:
     wl    : W/L 比
     delta : softmin 平滑参数 (V)
 
-    Level-2 高阶参数
-    ----------------
+    二阶效应参数（全部默认关闭）
+    ----------------------------
     theta  : 迁移率衰减系数 θ (V⁻¹)，典型值 0.05~0.5，默认 0（关闭）
     eta    : DIBL 系数 η (V/V)，典型值 0.01~0.1，默认 0（关闭）
     gamma  : 体效应系数 γ (V^0.5)，典型值 0.3~1.0，默认 0（关闭）
     phi_f  : 表面势 2φF (V)，典型值 0.6~0.8，默认 0.7
     n_sub  : 亚阈值斜率因子 n，典型值 1.1~2.0；
-             若为 None（默认）则关闭亚阈值导通，VGS≤Vth 时 ID=0
+             若为 None（默认）则截止区 ID=0（无亚阈值导通）
     """
 
     def __init__(self, vth=0.8, kp=100e-6, lam=0.02, wl=10.0, delta=0.02,
@@ -122,7 +125,7 @@ class NMOSModel:
                 e        = np.exp(arg)
                 s        = e / (1.0 + e)     # sigmoid = dVgsteff/dVov
         else:
-            # 硬截止（兼容 Level-1）
+            # 硬截止（无亚阈值导通，n_sub=None 时）
             if vov <= 0.0:
                 return 0.0, 0.0, 0.0, 0.0
             vgsteff = vov
@@ -270,7 +273,7 @@ class NMOSModel:
         if self.cgg is None:
             return 0.0, 0.0, 0.0
 
-        # Simplified Vov using Level-1 Vth (adequate for cap partition)
+        # Simplified Vov using base Vth (adequate for cap partition)
         vov = vgs - self.vth
 
         # Smooth step width (V) — a few kT/q so the transition is physically smooth
