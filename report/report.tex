@@ -107,12 +107,12 @@
 
   {\large 器件模型与 SPICE 仿真\par}
   \vspace{0.4em}
-  {\normalsize 复旦大学 微电子学院 \quad 2026 春\par}
+  {\normalsize 复旦大学 集成电路与微纳电子创新学院 \quad 2026 春\par}
 
   \vspace{2.5cm}
   {\normalsize
   \begin{tabular}{rl}
-    课程代码 & MICS3006 \\[0.3em]
+    小组成员 & 王耀冬（23300760013） 陈星（23300760005） 韩卓骏（23300760003）\\[0.3em]
     代码仓库 & \url{https://github.com/LArielOzjH/nano-spice} \\[0.3em]
     仿真语言 & Python 3 (NumPy + Matplotlib) \\
   \end{tabular}
@@ -644,6 +644,30 @@ $C_{gd}$ 趋近零（仅剩覆盖电容 $C_{gdo}$）。
 
 仿真代码已开源于 GitHub，结构模块化，便于后续扩展瞬态仿真（backward Euler）、
 噪声分析及多晶体管电路。
+
+% ============================================================
+\section{小组分工}
+% ============================================================
+
+\begin{table}[H]
+\centering
+\caption{小组成员分工}
+\begin{tabular}{lll}
+\toprule
+姓名 & 学号 & 主要负责内容 \\
+\midrule
+王耀冬 & 23300760013 &
+  基础 MOSFET 模型（Shichman-Hodges + CLM）、softmin 平滑、\\
+  & & MNA 矩阵构建、Newton-Raphson 求解器设计与调试 \\[0.4em]
+陈星   & 23300760005 &
+  二阶物理效应建模（亚阈值导通、迁移率衰减、DIBL、体效应）、\\
+  & & BD/BS 结二极管伴随模型、SPICE 标准收敛判据实现 \\[0.4em]
+韩卓骏 & 23300760003 &
+  寄生串联电阻 $R_s/R_d$ 扩展、AC 小信号分析（电容模型、\\
+  & & 复数域 MNA、Bode 图、$f_T$ 计算）、仿真脚本与报告撰写 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 % ============================================================
 \section*{附录：代码仓库}
