@@ -49,6 +49,9 @@
   showstringspaces=false, tabsize=4
 }
 
+% ── 复旦 Logo ────────────────────────────────────────────────
+\usepackage{fdulogo}
+
 % ── 单位 ────────────────────────────────────────────────────
 \usepackage{siunitx}
 \sisetup{mode=math, per-mode=symbol}
@@ -98,23 +101,35 @@
 % ── 封面 ────────────────────────────────────────────────────
 \begin{titlepage}
   \centering
-  \vspace*{3cm}
-  {\LARGE\bfseries\sffamily 共源 NMOS 放大器\\[0.4em]
+  \vspace*{1.5cm}
+
+  % 校徽 + 校名横排（x/y 为路径坐标单位，max coord ≈1039，0.07pt ≈ 2.5cm）
+  \fduemblem+[color=FudanBlue, x=0.07pt, y=0.07pt]
+  \hspace{0.5cm}
+  \fduname+[color=FudanBlue, x=0.07pt, y=0.07pt]
+
+  \vspace{1.0cm}
+  {\normalsize\sffamily 集成电路与微纳电子创新学院\par}
+
+  \vspace{1.8cm}
+  \rule{0.62\linewidth}{0.5pt}
+  \vspace{0.6cm}
+
+  {\LARGE\bfseries\sffamily 共源 NMOS 放大器\\[0.5em]
    SPICE 仿真器设计报告\par}
-  \vspace{1.2cm}
-  \rule{0.6\linewidth}{0.4pt}
-  \vspace{1.2cm}
 
-  {\large 器件模型与 SPICE 仿真\par}
-  \vspace{0.4em}
-  {\normalsize 复旦大学 集成电路与微纳电子创新学院 \quad 2026 春\par}
+  \vspace{0.6cm}
+  \rule{0.62\linewidth}{0.5pt}
+  \vspace{1.6cm}
 
-  \vspace{2.5cm}
+  {\large\sffamily 器件模型与 SPICE 仿真 \quad 2026 春\par}
+
+  \vspace{2.0cm}
   {\normalsize
   \begin{tabular}{rl}
-    小组成员 & 王耀冬（23300760013） 陈星（23300760005） 韩卓骏（23300760003）\\[0.3em]
-    代码仓库 & \url{https://github.com/LArielOzjH/nano-spice} \\[0.3em]
-    仿真语言 & Python 3 (NumPy + Matplotlib) \\
+    小组成员 & 王耀冬（23300760013）\quad 陈星（23300760005）\quad 韩卓骏（23300760003）\\[0.5em]
+    代码仓库 & \url{https://github.com/LArielOzjH/nano-spice} \\[0.5em]
+    仿真语言 & Python 3 \;(NumPy + Matplotlib) \\
   \end{tabular}
   \par}
 
