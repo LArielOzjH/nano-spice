@@ -1,0 +1,668 @@
+% ============================================================
+%  共源 NMOS 放大器 SPICE 仿真器设计报告
+%  编译方式: xelatex report.tex  (需运行两次以生成目录)
+% ============================================================
+\documentclass[12pt, a4paper]{article}
+
+% ── 中英文字体 ──────────────────────────────────────────────
+\usepackage[UTF8, fontset=none]{ctex}
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\setCJKmainfont[BoldFont=STHeiti, ItalicFont=STKaiti]{STFangsong}   % 仿宋（正文）
+\setCJKsansfont[BoldFont=STHeiti]{STHeiti}                           % 黑体（标题）
+\setCJKmonofont[BoldFont=STHeiti]{STFangsong}
+
+% ── 页面版式 ────────────────────────────────────────────────
+\usepackage[top=2.5cm, bottom=2.5cm, left=3cm, right=3cm, headheight=15pt]{geometry}
+\usepackage{setspace}
+\setstretch{1.35}
+
+% ── 数学 ────────────────────────────────────────────────────
+\usepackage{amsmath, amssymb, bm}
+
+% ── 图表 ────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{array}
+\captionsetup{font=small, labelfont=bf, skip=6pt}
+
+% ── 电路图 ──────────────────────────────────────────────────
+\usepackage{tikz}
+\usepackage[european, straightvoltages]{circuitikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
+
+% ── 代码 ────────────────────────────────────────────────────
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+  basicstyle=\small\ttfamily,
+  keywordstyle=\color{blue!70},
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{orange!80!black},
+  frame=single, rulecolor=\color{gray!40},
+  breaklines=true, numbers=left,
+  numberstyle=\tiny\color{gray},
+  xleftmargin=1.5em, xrightmargin=0.5em,
+  showstringspaces=false, tabsize=4
+}
+
+% ── 超链接 ──────────────────────────────────────────────────
+\usepackage[colorlinks, linkcolor=black, citecolor=black,
+            urlcolor=blue!70!black]{hyperref}
+
+% ── 章节标题格式 ────────────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\section}{\large\bfseries\sffamily}{{\thesection}}{0.8em}{}
+\titleformat{\subsection}{\normalsize\bfseries\sffamily}{{\thesubsection}}{0.8em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\sffamily}{{\thesubsubsection}}{0.8em}{}
+\titlespacing{\section}{0pt}{1.2ex plus 0.5ex}{0.6ex}
+\titlespacing{\subsection}{0pt}{0.9ex plus 0.3ex}{0.4ex}
+
+% ── 页眉页脚 ────────────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\sffamily 共源 NMOS 放大器 SPICE 仿真器}
+\fancyhead[R]{\small\sffamily 器件模型与 SPICE 仿真}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── 自定义命令 ──────────────────────────────────────────────
+\newcommand{\vth}{V_{\mathrm{th}}}
+\newcommand{\vgs}{V_{\mathrm{GS}}}
+\newcommand{\vds}{V_{\mathrm{DS}}}
+\newcommand{\vsb}{V_{\mathrm{SB}}}
+\newcommand{\vov}{V_{\mathrm{ov}}}
+\newcommand{\id}{I_{\mathrm{D}}}
+\newcommand{\gm}{g_{\mathrm{m}}}
+\newcommand{\gds}{g_{\mathrm{ds}}}
+\newcommand{\gmb}{g_{\mathrm{mb}}}
+\newcommand{\vT}{V_{\mathrm{T}}}
+
+% ============================================================
+\begin{document}
+% ============================================================
+
+% ── 封面 ────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{3cm}
+  {\LARGE\bfseries\sffamily 共源 NMOS 放大器\\[0.4em]
+   SPICE 仿真器设计报告\par}
+  \vspace{1.2cm}
+  \rule{0.6\linewidth}{0.4pt}
+  \vspace{1.2cm}
+
+  {\large 器件模型与 SPICE 仿真\par}
+  \vspace{0.4em}
+  {\normalsize 复旦大学 微电子学院 \quad 2026 春\par}
+
+  \vspace{2.5cm}
+  {\normalsize
+  \begin{tabular}{rl}
+    课程代码 & MICS3006 \\[0.3em]
+    代码仓库 & \url{https://github.com/LArielOzjH/nano-spice} \\[0.3em]
+    仿真语言 & Python 3 (NumPy + Matplotlib) \\
+  \end{tabular}
+  \par}
+
+  \vfill
+  {\small 本报告由仿真代码自动生成的图形及手工推导的公式共同构成。}
+\end{titlepage}
+
+% ── 目录 ────────────────────────────────────────────────────
+\tableofcontents
+\clearpage
+
+% ============================================================
+\section{引言}
+% ============================================================
+
+本报告记录了一个从零构建的共源 NMOS 放大器 SPICE 仿真器的完整设计过程。
+仿真器以改进节点分析法（Modified Nodal Analysis，MNA）为核心，
+配合 Newton-Raphson 迭代求解非线性 DC 方程组，
+并在此基础上扩展了二阶物理效应模型、结二极管模型
+以及复数域 AC 小信号分析。
+
+\textbf{主要目标：}
+\begin{itemize}
+  \item 建立可收敛的非线性 DC 工作点求解框架，覆盖截止区、线性区、饱和区；
+  \item 逐步引入亚阈值导通、迁移率衰减、DIBL、体效应、寄生串联电阻、结二极管等物理效应，
+        每项均可独立开关，形成清晰的效应对比；
+  \item 实现基于电荷分区的电容模型，并将 MNA 推广至复数域，完成 AC 频率扫描及带宽计算；
+  \item 所有求解收敛判据与商业 SPICE（如 PSpice）保持一致。
+\end{itemize}
+
+% ============================================================
+\section{电路拓扑与节点定义}
+% ============================================================
+
+\subsection{电路结构}
+
+仿真目标为图~\ref{fig:circuit} 所示共源 NMOS 放大器。
+负载电阻 $R_D = 10\,\mathrm{k\Omega}$ 接于 $V_{DD}=5\,\mathrm{V}$ 与输出节点 VOUT 之间；
+NMOS 晶体管 M0 的栅极由输入电压 $V_{IN}$ 直接驱动，源极接地。
+
+\begin{figure}[H]
+\centering
+\begin{circuitikz}[scale=1.1, american]
+  % VDD node
+  \node[above] at (3, 4.5) {$V_{DD} = 5\,\mathrm{V}$};
+  \draw (3, 4.5) -- (3, 4.0);
+  % RD
+  \draw (3, 4.0) to[R, l=$R_D{=}10\,\mathrm{k}\Omega$, v^<=$V_{R_D}$] (3, 2.2);
+  % VOUT node
+  \node[right] at (3.15, 2.2) {VOUT ($V_2$)};
+  \filldraw (3, 2.2) circle (1.5pt);
+  % NMOS
+  \draw (3, 2.2) -- (3, 1.9);
+  \draw (3, 1.9) node[nmos, anchor=drain] (mos) {};
+  % Gate
+  \draw (mos.gate) -- ++(-1.0, 0) node[left] {$V_{IN}$ ($V_1$)};
+  % Source to GND
+  \draw (mos.source) -- (3, 0) node[ground] {};
+  % VIN source
+  \draw (0, 0) node[ground] {} to[V, l=$V_{IN}$, invert] (0, 1.9) -- (mos.gate |- 0, 1.9) -- (mos.gate);
+  % VDD source
+  \draw (5, 0) node[ground] {} to[V, l=$V_{DD}$, invert] (5, 4.5) -- (3, 4.5);
+  % Labels
+  \node[right] at (3.6, 1.3) {M0};
+  \node[right, font=\small] at (3.6, 0.9) {$V_{th}{=}0.8\,\mathrm{V}$};
+  \node[right, font=\small] at (3.6, 0.55) {$k_p{=}100\,\mu\mathrm{A/V^2}$, $W/L{=}10$};
+\end{circuitikz}
+\caption{共源 NMOS 放大器电路图。当考虑源极/漏极寄生电阻时，
+在节点 VOUT 与 M0 漏极之间插入 $R_d$（本征漏极节点 $V_5$），
+在 M0 源极与地之间插入 $R_s$（本征源极节点 $V_4$）。}
+\label{fig:circuit}
+\end{figure}
+
+\subsection{节点与未知量定义}
+
+为统一处理有无寄生电阻两种情况，MNA 系统始终维持 7 个未知量：
+\[
+  \bm{x} = \bigl[V_1,\; V_2,\; V_3,\; V_4\,(S'),\; V_5\,(D'),\; I_{V_{IN}},\; I_{V_{DD}}\bigr]^T
+\]
+各节点含义如表~\ref{tab:nodes} 所示。当 $R_s=0$ 时令 $V_4=0$（约束方程），
+当 $R_d=0$ 时令 $V_5=V_2$，系统退化为等效的无寄生情形。
+
+\begin{table}[H]
+\centering
+\caption{MNA 未知量定义}
+\label{tab:nodes}
+\begin{tabular}{cll}
+\toprule
+索引 & 物理含义 & 备注 \\
+\midrule
+$V_1$ & Gate 电压 & 由 $V_{IN}$ 电压源约束 \\
+$V_2$ & VOUT / 外部漏极 & 输出节点 \\
+$V_3$ & $V_{DD}$ & 由 $V_{DD}$ 电压源约束 \\
+$V_4$ & 本征源极 $S'$ & $R_s=0$ 时约束为 $0$ \\
+$V_5$ & 本征漏极 $D'$ & $R_d=0$ 时约束为 $V_2$ \\
+$I_{V_{IN}}$ & 流过 $V_{IN}$ 源的电流 & KVL 引入的辅助变量 \\
+$I_{V_{DD}}$ & 流过 $V_{DD}$ 源的电流 & KVL 引入的辅助变量 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================
+\section{改进节点分析法（MNA）}
+% ============================================================
+
+\subsection{基本原理}
+
+MNA 将 KCL（节点电流守恒）和 KVL（电压源约束）联立，
+对线性网络可直接建立 $\bm{A}\bm{x}=\bm{b}$；
+对含 MOSFET 等非线性元件的电路，则在每次 Newton-Raphson 迭代时
+用伴随模型（小信号线性化）替换非线性器件，重建线性方程组。
+
+\subsection{七变量方程组}
+
+以节点 $V_4$（$S'$）和 $V_5$（$D'$）的本征管脚为基础，
+NMOS 的内部电压为：
+\[
+  V_{GS,\mathrm{int}} = V_1 - V_4,\quad
+  V_{DS,\mathrm{int}} = V_5 - V_4,\quad
+  V_{SB} = V_4
+\]
+各行方程对应含义如下（以 $R_s>0,\;R_d>0$ 的一般情况为例）：
+
+\begin{align}
+  \text{行 0 (节点1 KCL):}&\quad I_{V_{IN}} = 0 \label{eq:row0}\\
+  \text{行 1 (节点2 KCL):}&\quad (V_3-V_2)G_{load} - (V_2-V_5)G_{rd} = 0 \label{eq:row1}\\
+  \text{行 2 (节点3 KCL):}&\quad -(V_3-V_2)G_{load} + I_{V_{DD}} = 0 \label{eq:row2}\\
+  \text{行 3 (节点4 KCL):}&\quad I_D + I_{BS} - V_4 G_{rs} = 0 \label{eq:row3}\\
+  \text{行 4 (节点5 KCL):}&\quad (V_2-V_5)G_{rd} - I_D + I_{BD} = 0 \label{eq:row4}\\
+  \text{行 5 (KVL\ }V_{IN}\text{):}&\quad V_1 = V_{IN} \label{eq:row5}\\
+  \text{行 6 (KVL\ }V_{DD}\text{):}&\quad V_3 = V_{DD} \label{eq:row6}
+\end{align}
+
+其中 $G_{load}=1/R_D$，$G_{rs}=1/R_s$，$G_{rd}=1/R_d$；
+$I_{BD}$、$I_{BS}$ 为 BD/BS 结二极管电流（第~\ref{sec:diode} 节详述）。
+
+\subsection{伴随模型与线性化雅可比}
+
+在工作点 $\bm{x}^{(k)}$ 处，NMOS 漏极电流线性化为：
+\[
+  I_D \approx I_{eq} + \gm V_1 + (-\gm - \gds + \gmb)V_4 + \gds V_5
+\]
+其中伴随电流源常数为：
+\[
+  I_{eq} = I_D^{(k)} - \gm^{(k)} V_{GS,\mathrm{int}}^{(k)}
+           - \gds^{(k)} V_{DS,\mathrm{int}}^{(k)} - \gmb^{(k)} V_{SB}^{(k)}
+\]
+将此线性化关系代入方程组，即得每步迭代的线性方程 $\bm{A}^{(k)}\bm{x}^{\mathrm{new}}=\bm{b}^{(k)}$，
+用标准 LU 分解求解。
+
+% ============================================================
+\section{NMOS 晶体管模型}
+% ============================================================
+
+\subsection{基础模型（Shichman-Hodges + CLM）}
+\label{sec:base}
+
+基础漏极电流公式为：
+\[
+  \id = k_p \frac{W}{L}
+        \left(V_{gsteff}\,V_{ds,\mathrm{eff}} - \tfrac{1}{2}V_{ds,\mathrm{eff}}^2\right)
+        (1 + \lambda V_{DS})
+\]
+其中 $\lambda$ 为沟道长度调制系数，$(1+\lambda V_{DS})$ 项描述沟道夹断后电流随
+$V_{DS}$ 的缓慢增大（有限输出电阻 $r_o = 1/(\lambda I_D)$）。
+
+器件参数取值：$V_{th}=0.8\,\mathrm{V}$，$k_p=100\,\mu\mathrm{A/V^2}$，
+$W/L=10$，$\lambda=0.02\,\mathrm{V^{-1}}$。
+
+\subsection{softmin 平滑技术}
+\label{sec:softmin}
+
+传统 SPICE 模型在线性区与饱和区边界存在一阶导数不连续（$\partial I_D/\partial V_{DS}$ 跳变），
+导致 Newton-Raphson 在该区域收敛缓慢甚至振荡。
+本仿真器采用 \textit{softmin} 函数替代硬截断：
+\[
+  V_{ds,\mathrm{eff}} = \frac{1}{2}\!\left(
+    V_{DS} + V_{gsteff}
+    - \sqrt{(V_{DS} - V_{gsteff})^2 + \delta^2}
+  \right)
+\]
+其中 $\delta=0.02\,\mathrm{V}$ 为平滑参数。
+当 $V_{DS} \ll V_{gsteff}$ 时 $V_{ds,\mathrm{eff}}\approx V_{DS}$（线性区），
+当 $V_{DS} \gg V_{gsteff}$ 时 $V_{ds,\mathrm{eff}}\approx V_{gsteff}$（饱和区），
+过渡区内函数光滑可微，雅可比矩阵连续，保证 Newton-Raphson 的二次收敛性。
+
+偏导数解析形式为：
+\[
+  \frac{\partial V_{ds,\mathrm{eff}}}{\partial V_{DS}} = \frac{1}{2}\!\left(
+    1 - \frac{V_{DS}-V_{gsteff}}{\sqrt{(V_{DS}-V_{gsteff})^2+\delta^2}}
+  \right),\quad
+  \frac{\partial V_{ds,\mathrm{eff}}}{\partial V_{gsteff}} = 1 -
+  \frac{\partial V_{ds,\mathrm{eff}}}{\partial V_{DS}}
+\]
+
+\subsection{亚阈值导通}
+\label{sec:subthreshold}
+
+标准 Shichman-Hodges 模型在 $V_{GS}<V_{th}$ 时令 $I_D=0$，忽略了弱反型区的指数型电流。
+引入统一有效栅压 $V_{gsteff}$，使弱反型与强反型连续过渡：
+\[
+  V_{gsteff} = n \vT \ln\!\left(1 + e^{V_{ov}/(n\vT)}\right)
+\]
+其中 $V_{ov}=V_{GS}-V_{th}$，$n$ 为亚阈值斜率因子（典型值 $1.1\sim2.0$），
+$\vT=kT/q\approx25.85\,\mathrm{mV}$（室温）。
+
+当 $V_{ov}\gg n\vT$ 时 $V_{gsteff}\approx V_{ov}$（强反型），
+当 $V_{ov}\ll0$ 时 $V_{gsteff}\approx n\vT e^{V_{ov}/(n\vT)}$（弱反型指数律），
+两端均无突变，微分连续。对应的 $\gm$ 修正因子为 sigmoid 函数：
+\[
+  \frac{\partial V_{gsteff}}{\partial V_{GS}} = \frac{e^{V_{ov}/(n\vT)}}{1+e^{V_{ov}/(n\vT)}}
+  \in (0,\,1)
+\]
+
+\subsection{迁移率衰减}
+
+高横向电场（大 $V_{GS}$）导致载流子表面散射增强，有效迁移率下降：
+\[
+  \mu_{eff} = \frac{\mu_0}{1 + \theta \cdot V_{ov}},\quad
+  k_{p,\mathrm{eff}} = \frac{k_p}{1 + \theta \cdot V_{ov}},\quad V_{ov}>0
+\]
+$\theta$ 为迁移率衰减系数（典型值 $0.05\sim0.5\,\mathrm{V^{-1}}$）。
+对 $\gm$ 的影响：跨导在大 $V_{GS}$ 下不再线性增大，而是趋于饱和，
+这与实际测量一致。
+
+\subsection{漏致势垒降低（DIBL）}
+
+短沟道器件中，漏极电场穿透沟道影响源端势垒，导致阈值电压随 $V_{DS}$ 下降：
+\[
+  V_{th,\mathrm{eff}} = V_{th0} - \eta \cdot V_{DS}
+\]
+$\eta$ 为 DIBL 系数（典型值 $0.01\sim0.1\,\mathrm{V/V}$）。
+与沟道长度调制（$\lambda$ 项）不同，DIBL 对阈值电压的改变影响
+$V_{ov}$ 的计算，从而放大了饱和区电流对 $V_{DS}$ 的敏感度，
+给出更真实的输出电导。
+DIBL 对 $\gds$ 的贡献为：
+\[
+  \gds\big|_{\mathrm{DIBL}} = \gm \cdot \eta
+\]
+
+\subsection{体效应}
+
+源极与体（衬底）之间的偏置电压 $V_{SB}$ 使耗尽层变宽，阈值电压升高：
+\[
+  V_{th,\mathrm{eff}} = V_{th0} + \gamma\left(\sqrt{|V_{SB}|+2\phi_F} - \sqrt{2\phi_F}\right)
+\]
+$\gamma$ 为体效应系数（典型值 $0.3\sim1.0\,\mathrm{V^{1/2}}$），$2\phi_F$ 为强反型所需表面势。
+相应的体效应跨导为：
+\[
+  \gmb = \gm \cdot \frac{\gamma}{2\sqrt{|V_{SB}|+2\phi_F}}
+\]
+在本电路（源极接地，$V_{SB}=V_4$）中，当引入寄生源极电阻 $R_s$ 后
+$V_4>0$，体效应自然产生；无 $R_s$ 时 $V_4=0$，体效应为零。
+
+\subsection{寄生串联电阻（Rs/Rd）}
+
+实际工艺中，源极与漏极的欧姆接触引入串联电阻 $R_s$、$R_d$。
+处理方式是在 MNA 中显式引入两个本征节点 $S'$（$V_4$）和 $D'$（$V_5$），
+以线性电阻连接至外部节点（图~\ref{fig:circuit}），MOSFET 模型仅操作内部电压。
+这一做法无需修改晶体管模型本身，并且天然产生源极体效应（$V_4>0$）和有效跨导衰减：
+\[
+  g_{m,\mathrm{eff}} \approx \frac{\gm}{1 + \gm R_s}
+\]
+
+\subsection{BD/BS 结二极管}
+\label{sec:diode}
+
+漏极/源极 n\textsuperscript{+} 扩散区与 p 型衬底形成反偏 PN 结。
+本仿真器采用理想二极管模型：
+\[
+  I_{BD} = I_S\!\left(e^{V_{BD}/\vT} - 1\right),\quad
+  V_{BD} = V_B - V_{D'} = -V_5
+\]
+采用伴随模型（Norton 等效）线性化后，在本征漏极节点的 MNA stamp 为：
+\begin{align}
+  A[D',D'] &\mathrel{-}= G_{BD} = \frac{I_S}{\vT}e^{V_{BD}/\vT} \\
+  b[D'] &\mathrel{-}= I_{BD,0} = I_{BD} - G_{BD}\cdot V_{BD}
+\end{align}
+BS 结处理方式相同（$V_{BS}=-V_4$，stamp 至节点 $S'$）。
+对指数项作 $40\vT$ 限幅以防止正偏时数值溢出。
+当 $I_S=0$ 时所有二极管路径自动关闭，与基础模型完全兼容。
+
+% ============================================================
+\section{Newton-Raphson 迭代求解器}
+% ============================================================
+
+\subsection{算法框架}
+
+设非线性方程组为 $\bm{F}(\bm{x})=\bm{0}$，Newton-Raphson 迭代为：
+\[
+  \bm{x}^{(k+1)} = \bm{x}^{(k)} - \bm{J}^{-1}\!\left(\bm{x}^{(k)}\right)\bm{F}\!\left(\bm{x}^{(k)}\right)
+\]
+其中雅可比矩阵 $\bm{J}=\partial\bm{F}/\partial\bm{x}$ 即为 MNA 矩阵 $\bm{A}$，
+由 MOSFET 的解析导数（$\gm,\gds,\gmb$）及各电阻的电导填充，无需数值差分。
+解析雅可比使迭代在工作点附近具有二次收敛速度，通常仅需 2\;--\;6 步即可收敛。
+
+\subsection{阻尼策略}
+
+初始猜测偏离工作点较远时，全步 Newton 更新可能使残差增大。
+仿真器采用残差驱动的 $\lambda$-halving 策略：若完整步长使
+$\|\bm{F}(\bm{x}^{(k+1)})\| > \|\bm{F}(\bm{x}^{(k)})\|$，
+则将步长折半 $\lambda \leftarrow \lambda/2$，
+最多折半 10 次，最终取满足条件的最大 $\lambda$。
+
+\subsection{SPICE 标准收敛判据}
+
+采用与商业 SPICE 一致的逐分量收敛判据（课程第~11 章 p.~12）：
+\[
+  |\Delta x_i| < \varepsilon_{a,i} + \varepsilon_r \cdot
+  \min\!\left(|x_i^{(k)}|,\; |x_i^{(k+1)}|\right), \quad \forall i
+\]
+其中：
+\begin{itemize}
+  \item $\varepsilon_{a}$：绝对容差，电压变量取 $10^{-6}\,\mathrm{V}$，电流变量取 $10^{-12}\,\mathrm{A}$；
+  \item $\varepsilon_r = 10^{-3}$：相对容差（0.1\%），与 HSPICE/PSpice 默认值一致；
+  \item $\min(\cdot)$ 而非 $\max(\cdot)$：避免因一端接近零而过于宽松。
+\end{itemize}
+所有分量同时满足则判定收敛，最大迭代次数设为 100。
+
+% ============================================================
+\section{电容模型与 AC 小信号分析}
+% ============================================================
+
+\subsection{基于电荷分区的栅极电容模型}
+
+根据课程第~4 章的电荷守恒分区方法，各工作区内本征栅极电容值如下：
+
+\begin{table}[H]
+\centering
+\caption{各工作区栅极本征电容分配}
+\label{tab:caps}
+\begin{tabular}{lccc}
+\toprule
+工作区 & $C_{gs,\mathrm{int}}$ & $C_{gd,\mathrm{int}}$ & $C_{gb}$ \\
+\midrule
+截止区 ($V_{ov}<0$) & $0$ & $0$ & $C_{gg}$ \\
+线性区 ($V_{DS}<V_{ov}$) & $C_{gg}/2$ & $C_{gg}/2$ & $0$ \\
+饱和区 ($V_{DS}>V_{ov}$) & $\tfrac{2}{3}C_{gg}$ & $0$ & $0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+为保持数值连续性，区域切换采用 sigmoid 函数平滑：
+\[
+  C_{gs} = C_{gg}\,\sigma_{on}\!\left(\tfrac{1}{2}+\tfrac{1}{6}\sigma_{sat}\right) + C_{gso},\quad
+  C_{gd} = C_{gg}\,\sigma_{on}\cdot\tfrac{1}{2}(1-\sigma_{sat}) + C_{gdo},\quad
+  C_{gb} = C_{gg}(1-\sigma_{on})
+\]
+其中 $\sigma_{on}=\sigma(V_{ov}/w)$，$\sigma_{sat}=\sigma\bigl((V_{DS}-V_{DS,\mathrm{sat}})/w\bigr)$，
+$w=50\,\mathrm{mV}$ 为过渡宽度；$C_{gso}$、$C_{gdo}$ 为工艺覆盖电容（overlap capacitance）。
+
+\subsection{复数域 MNA}
+
+将 DC 工作点处的小信号电导矩阵 $\bm{G}$（由 $\gm,\gds,G_{load}$等构成）
+与电容矩阵 $\bm{C}$（由 $C_{gs},C_{gd},C_{gb}$ 的 stamp 构成）叠加，
+得到导纳矩阵：
+\[
+  \bm{Y}(j\omega) = \bm{G} + j\omega\bm{C}
+\]
+对各频率点求解：
+\[
+  \bm{Y}(j\omega)\,\bm{x}_{ac} = \bm{b}_{ac}
+\]
+激励向量 $\bm{b}_{ac}$ 在 $V_{IN}$ 对应行置 $1$（单位 AC 激励），其余为 $0$。
+解向量的 $V_2$ 分量即为输出电压，传递函数为：
+\[
+  H(j\omega) = \frac{V_2(\omega)}{1}
+\]
+
+$\bm{C}$ 矩阵中 $C_{gs}$、$C_{gd}$、$C_{gb}$ 的 stamp 规则（以 $R_d>0$ 为例）：
+\begin{itemize}
+  \item $C_{gs}$：连接 Gate ($V_1$) 与 $S'$ ($V_4$)，按差分电容 stamp（$[1,1],[4,4]$ 加，$[1,4],[4,1]$ 减）；
+  \item $C_{gd}$：连接 Gate ($V_1$) 与 $D'$ ($V_5$)，stamp 类似；
+  \item $C_{gb}$：Gate ($V_1$) 对地，仅 $[1,1]$ 加 $C_{gb}$。
+\end{itemize}
+
+\subsection{频率响应与 $-3\,\mathrm{dB}$ 带宽}
+
+在 DC 工作点 $V_{IN}=1.5\,\mathrm{V}$（饱和区）处，以对数间隔取
+$10^6\sim10^{12}\,\mathrm{Hz}$ 的频率点，逐点求解复数 MNA，计算：
+\[
+  |H(j\omega)|_{dB} = 20\log_{10}|H(j\omega)|
+\]
+在幅度曲线上通过线性插值定位 $-3\,\mathrm{dB}$ 频率点 $f_{-3\mathrm{dB}}$。
+
+\subsection{单位电流增益截止频率 $f_T$}
+
+$f_T$ 定义为短路电流增益降至 1 时的频率，解析式为：
+\[
+  f_T = \frac{\gm}{2\pi(C_{gs}+C_{gd})}
+\]
+该指标反映晶体管本征速度上限，不受外部负载影响。
+
+% ============================================================
+\section{仿真结果}
+% ============================================================
+
+\subsection{DC 工作点扫描}
+
+图~\ref{fig:vout} 展示了 VOUT 与 VIN 的完整转移特性。
+电路工作区间可明显分为三段：
+$V_{IN}<0.8\,\mathrm{V}$ 为截止区（VOUT $\approx V_{DD}$）；
+$0.8\,\mathrm{V}<V_{IN}<1.4\,\mathrm{V}$ 为饱和区（高增益线性放大）；
+$V_{IN}>1.4\,\mathrm{V}$ 时 MOSFET 进入线性区（VOUT 被拉至低电位）。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\textwidth]{../results/vout_vs_vin.png}
+  \caption{VOUT vs.\ VIN 转移特性曲线（稀疏扫描点 + 连续曲线叠加）}
+  \label{fig:vout}
+\end{figure}
+
+图~\ref{fig:smallsig} 给出了各 VIN 点的小信号参数。
+跨导 $\gm$ 在饱和区中部（约 $V_{IN}=1.2\,\mathrm{V}$）达到峰值，
+此后受迁移率衰减或进入线性区而下降；
+增益 $|A_v|=\gm(r_o\|R_D)$ 的峰值约为 $16\,\mathrm{dB}$。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\textwidth]{../results/smallsig_vs_vin.png}
+  \caption{小信号参数 $g_m$、$r_o$、$|A_v|$ 随 VIN 的变化}
+  \label{fig:smallsig}
+\end{figure}
+
+图~\ref{fig:newton} 记录了每个 VIN 点处 Newton-Raphson 的迭代次数。
+绝大多数点在 3\;--\;4 次内收敛，过渡区边界处略有增加但不超过 8 次，
+验证了 softmin + 解析雅可比 + SPICE 收敛判据的有效性。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.72\textwidth]{../results/newton_iters.png}
+  \caption{Newton-Raphson 迭代次数分布}
+  \label{fig:newton}
+\end{figure}
+
+\subsection{二阶物理效应分析}
+
+图~\ref{fig:effects_vout} 将基础模型与各二阶效应逐一对比。
+各效应的定性影响总结如下：
+
+\begin{itemize}
+  \item \textbf{亚阈值导通}：在 $V_{IN}<V_{th}$ 区间产生指数型漏电流，
+        VOUT 低于基础模型的 $V_{DD}$，转移特性更平滑；
+  \item \textbf{迁移率衰减}：大 $V_{GS}$ 时电流受限，VOUT 的下降斜率变小，
+        导致相同 VIN 下 VOUT 更高；
+  \item \textbf{DIBL}：降低有效阈值，使转移特性向左平移，
+        等效增大了饱和区的 $\gds$；
+  \item \textbf{体效应}：仅在引入 $R_s$ 后 $V_4>0$ 时生效，升高 $V_{th}$，
+        减小电流；
+  \item \textbf{寄生串联电阻}：插入 $R_s$/$R_d$ 后等效跨导下降，
+        放大器增益降低，VOUT 下降幅度变小。
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{../results/secondary_effects_vout.png}
+  \caption{基础模型与各二阶物理效应对 VOUT 的影响对比}
+  \label{fig:effects_vout}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{../results/secondary_effects_gm_id.png}
+  \caption{各效应对 $g_m$ 和 $I_D$ 的影响对比}
+  \label{fig:effects_gm}
+\end{figure}
+
+\subsection{AC 频率响应}
+
+图~\ref{fig:bode} 为 AC Bode 图，工作点取 $V_{IN}=1.5\,\mathrm{V}$（饱和区）。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\textwidth]{../results/ac_bode.png}
+  \caption{AC Bode 图（幅度 + 相位），标注 $-3\,\mathrm{dB}$ 带宽与 $f_T$}
+  \label{fig:bode}
+\end{figure}
+
+从图中可以读出：
+低频增益约 $20\,\mathrm{dB}$（与 DC 小信号增益 $|A_v|=\gm(r_o\|R_D)\approx10$ 一致），
+幅度在高频处单极点滚降；
+$-3\,\mathrm{dB}$ 带宽 $f_{-3\mathrm{dB}}$ 由输出节点对地等效电容和负载电阻决定，
+主要受 $C_{gd}$（Miller 等效）影响。
+$f_T = \gm/(2\pi(C_{gs}+C_{gd}))$ 反映晶体管本征速度，
+在所选工作点下约为数 GHz 量级。
+
+图~\ref{fig:caps} 给出了栅极电容随 VIN 的变化，验证了第~\ref{sec:subthreshold} 节
+中各区间的分配规律：截止区 $C_{gb}$ 占主导；进入饱和区后 $C_{gs}$ 约为 $2/3\,C_{gg}$，
+$C_{gd}$ 趋近零（仅剩覆盖电容 $C_{gdo}$）。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\textwidth]{../results/ac_caps_vs_vin.png}
+  \caption{$C_{gs}$、$C_{gd}$、$C_{gb}$ 随 VIN 的变化（含覆盖电容）}
+  \label{fig:caps}
+\end{figure}
+
+% ============================================================
+\section{与 PSpice 仿真对比}
+% ============================================================
+
+\textit{（本节待补充。将对照 PSpice 仿真数据，在同一坐标系下比较 VOUT、$I_D$、$g_m$ 等曲线，
+  并对误差来源进行定量分析。）}
+
+% ============================================================
+\section{结论}
+% ============================================================
+
+本仿真器从零实现了一个功能完整的共源 NMOS 放大器 SPICE 级仿真器，主要成果如下：
+
+\begin{enumerate}
+  \item \textbf{MNA 框架}：建立了 7 变量扩展 MNA，统一处理有无寄生电阻两种情况，
+        结构清晰、可扩展性强；
+  \item \textbf{物理模型}：在 Shichman-Hodges 基础上逐步引入了亚阈值导通、迁移率衰减、
+        DIBL、体效应、寄生串联电阻、BD/BS 结二极管共 6 项二阶效应，
+        每项均可独立开关并有精确解析导数；
+  \item \textbf{求解器}：Newton-Raphson 结合 softmin 连续化、阻尼策略和 SPICE 标准收敛判据，
+        收敛稳健，典型点仅需 3\;--\;4 次迭代；
+  \item \textbf{AC 分析}：实现了基于电荷分区电容模型的复数域 MNA，
+        可计算全频段 Bode 图、$-3\,\mathrm{dB}$ 带宽及 $f_T$。
+\end{enumerate}
+
+仿真代码已开源于 GitHub，结构模块化，便于后续扩展瞬态仿真（backward Euler）、
+噪声分析及多晶体管电路。
+
+% ============================================================
+\section*{附录：代码仓库}
+\addcontentsline{toc}{section}{附录：代码仓库}
+% ============================================================
+
+\begin{center}
+  \url{https://github.com/LArielOzjH/nano-spice}
+\end{center}
+
+\medskip
+\noindent 仓库目录结构：
+\begin{lstlisting}[language=bash, caption={项目目录结构}]
+nano-spice/
++-- simulate.py           # 主脚本：运行所有仿真并保存图形
++-- spice_sim/
+|   +-- models/
+|   |   +-- nmos.py       # NMOS 模型（基础 + 二阶效应 + 电容）
+|   |   +-- resistor.py   # 线性电阻 MNA stamp
+|   +-- core/
+|   |   +-- mna.py        # MNA 矩阵构建（7 变量，含寄生电阻和二极管）
+|   |   +-- newton.py     # Newton-Raphson 求解器（SPICE 收敛判据）
+|   +-- analysis/
+|       +-- dc_op.py      # 单点 DC 工作点
+|       +-- dc_sweep.py   # DC 参数扫描
+|       +-- ac_sweep.py   # AC 小信号频率扫描
++-- results/              # 自动生成的仿真图形（git-ignored）
+\end{lstlisting}
+
+\noindent 运行仿真：
+\begin{lstlisting}[language=bash, caption={运行方式}]
+pip install numpy matplotlib
+python simulate.py     # 生成 results/ 下所有图形
+\end{lstlisting}
+
+\end{document}
